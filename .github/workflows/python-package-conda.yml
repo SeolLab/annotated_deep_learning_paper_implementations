@@ -22,15 +22,14 @@ jobs:
         echo "$HOME/miniconda/bin" >> $GITHUB_PATH
         source $HOME/miniconda/bin/activate
         conda init bash
+        source ~/.bashrc
         conda create -n myenv python=3.9 -y
-        echo "conda activate myenv" >> $GITHUB_ENV
-        source $GITHUB_ENV
     - name: Install faiss and dependencies
       run: |
-        conda activate myenv
+        source $HOME/miniconda/bin/activate myenv
         conda install -c conda-forge faiss-cpu -y
         pip install -r requirements.txt
     - name: Test with pytest
       run: |
-        conda activate myenv
+        source $HOME/miniconda/bin/activate myenv
         python labml_nn/graphs/gat/experiment.py
