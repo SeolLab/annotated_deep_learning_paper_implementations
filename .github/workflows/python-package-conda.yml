@@ -15,15 +15,22 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: 3.9
-    - name: Install conda and dependencies
+    - name: Install Miniconda
       run: |
-        sudo apt-get update
-        sudo apt-get install -y conda
+        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+        bash miniconda.sh -b -p $HOME/miniconda
+        echo "$HOME/miniconda/bin" >> $GITHUB_PATH
+        source $HOME/miniconda/bin/activate
+        conda init bash
         conda create -n myenv python=3.9 -y
         echo "conda activate myenv" >> $GITHUB_ENV
         source $GITHUB_ENV
+    - name: Install faiss and dependencies
+      run: |
+        conda activate myenv
         conda install -c conda-forge faiss-cpu -y
         pip install -r requirements.txt
     - name: Test with pytest
       run: |
+        conda activate myenv
         python labml_nn/graphs/gat/experiment.py
