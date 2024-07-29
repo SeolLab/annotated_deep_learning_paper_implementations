@@ -11,17 +11,19 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Set up python 3.9
+    - name: Set up Python 3.9
       uses: actions/setup-python@v2
       with:
         python-version: 3.9
-    - name: Install dependencies
+    - name: Install conda and dependencies
       run: |
-        python -m pip install --upgrade pip
+        sudo apt-get update
+        sudo apt-get install -y conda
+        conda create -n myenv python=3.9 -y
+        echo "conda activate myenv" >> $GITHUB_ENV
+        source $GITHUB_ENV
+        conda install -c conda-forge faiss-cpu -y
         pip install -r requirements.txt
-    - name: Install faiss
-      run: |
-        pip install faiss-cpu
     - name: Test with pytest
       run: |
         python labml_nn/graphs/gat/experiment.py
