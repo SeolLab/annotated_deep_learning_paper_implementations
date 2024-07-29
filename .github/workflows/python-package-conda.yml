@@ -24,11 +24,13 @@ jobs:
         conda init bash
         source ~/.bashrc
         conda create -n myenv python=3.9 -y
-    - name: Install faiss and dependencies
+    - name: Install dependencies
       run: |
         source $HOME/miniconda/bin/activate myenv
         conda install -c conda-forge faiss-cpu -y
         pip install -r requirements.txt
+    - name: Set PYTHONPATH
+      run: echo "PYTHONPATH=$(pwd):${PYTHONPATH}" >> $GITHUB_ENV
     - name: Test with pytest
       run: |
         source $HOME/miniconda/bin/activate myenv
