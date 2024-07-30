@@ -9,11 +9,11 @@ summary: >
 """
 
 from typing import Dict
-
 import numpy as np
 import torch
 from torch import nn
-
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from labml import lab, monit, tracker, experiment
 from labml.configs import BaseConfigs, option, calculate
 from labml.utils import download
@@ -21,6 +21,7 @@ from labml_helpers.device import DeviceConfigs
 from labml_helpers.module import Module
 from labml_nn.graphs.gat import GraphAttentionLayer
 from labml_nn.optimizers.configs import OptimizerConfigs
+
 
 
 class CoraDataset:
@@ -213,11 +214,15 @@ class Configs(BaseConfigs):
         # Random indexes
         idx_rand = torch.randperm(len(labels))
         # Nodes for training
-        idx_train = idx_rand[:self.training_samples]
-        # Nodes for validation
-        idx_valid = idx_rand[self.training_samples:]
+        train_split = int(0.6 * len(labels))
+        validate_split = int(0.8 * len(labels))
+        idx_train = idx_rand[:train_split]
+        idx_valid = idx_rand[train_split:validate_split]
+        idx_test = idx_rand[validate_split:]
 
-        # Training loop
+        train_losses, valid_losses = [], []
+        train_accuracies, valid_accuracies = []
+
         for epoch in monit.loop(self.epochs):
             # Set the model to training mode
             self.model.train()
@@ -231,28 +236,74 @@ class Configs(BaseConfigs):
             loss.backward()
             # Take optimization step
             self.optimizer.step()
-            # Log the loss
-            tracker.add('loss.train', loss)
-            # Log the accuracy
-            tracker.add('accuracy.train', accuracy(output[idx_train], labels[idx_train]))
+            
+            train_loss = loss.item()
+            train_acc = accuracy(output[idx_train], labels[idx_train])
+            tracker.add('loss.train', train_loss)
+            tracker.add('accuracy.train', train_acc)
+            train_losses.append(train_loss)
+            train_accuracies.append(train_acc)
 
             # Set mode to evaluation mode for validation
             self.model.eval()
-
             # No need to compute gradients
             with torch.no_grad():
                 # Evaluate the model again
-                output = self.model(features, edges_adj)
+                valid_output = self.model(features, edges_adj)
                 # Calculate the loss for validation nodes
-                loss = self.loss_func(output[idx_valid], labels[idx_valid])
-                # Log the loss
-                tracker.add('loss.valid', loss)
-                # Log the accuracy
-                tracker.add('accuracy.valid', accuracy(output[idx_valid], labels[idx_valid]))
+                valid_loss = self.loss_func(valid_output[idx_valid], labels[idx_valid])
+                valid_acc = accuracy(valid_output[idx_valid], labels[idx_valid])
+                tracker.add('loss.valid', valid_loss.item())
+                tracker.add('accuracy.valid', valid_acc)
+                valid_losses.append(valid_loss.item())
+                valid_accuracies.append(valid_acc)
 
             # Save logs
             tracker.save()
 
+        # Testing part after all epochs are done
+        self.model.eval()
+        with torch.no_grad():
+            # Forward pass on test set
+            test_output = self.model(features, edges_adj)
+            # Calculate test loss
+            test_loss = self.loss_func(test_output[idx_test], labels[idx_test])
+            # Calculate test accuracy
+            test_accuracy = accuracy(test_output[idx_test], labels[idx_test])
+            print(f"Test Loss: {test_loss}, Test Accuracy: {test_accuracy}")
+
+            # Confusion matrix
+            test_pred = test_output.argmax(dim=-1).cpu().numpy()
+            test_true = labels[idx_test].cpu().numpy()
+            cm = confusion_matrix(test_true, test_pred, labels=list(range(self.n_classes)))
+            disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=list(self.dataset.classes.keys()))
+            disp.plot(cmap=plt.cm.Blues)
+            plt.title("Confusion Matrix")
+            plt.show()
+
+        # Plotting loss and accuracy
+        epochs = range(1, len(train_losses) + 1)
+        plt.figure(figsize=(12, 5))
+        
+        # Loss plot
+        plt.subplot(1, 2, 1)
+        plt.plot(epochs, train_losses, 'b-', label='Training loss')
+        plt.plot(epochs, valid_losses, 'r-', label='Validation loss')
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.legend()
+        plt.title('Loss over epochs')
+
+        # Accuracy plot
+        plt.subplot(1, 2, 2)
+        plt.plot(epochs, train_accuracies, 'b-', label='Training accuracy')
+        plt.plot(epochs, valid_accuracies, 'r-', label='Validation accuracy')
+        plt.xlabel('Epochs')
+        plt.ylabel('Accuracy')
+        plt.legend()
+        plt.title('Accuracy over epochs')
+        
+        plt.show()
 
 @option(Configs.dataset)
 def cora_dataset(c: Configs):
