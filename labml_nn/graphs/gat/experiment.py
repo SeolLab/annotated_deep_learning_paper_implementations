@@ -299,6 +299,35 @@ def main():
         'optimizer.weight_decay': 5e-4,
     })
 
+
+
+    # Start and watch the experiment
+    with experiment.start():
+        # Load the data
+        features = conf.dataset.features.to(conf.device)
+        labels = conf.dataset.labels.to(conf.device)
+        edges_adj = conf.dataset.adj_mat.to(conf.device)
+        edges_adj = edges_adj.unsqueeze(-1)
+        
+        # Random indexes
+        idx_rand = torch.randperm(len(labels))
+        
+        # Split data into train, validate, and test
+        train_split = int(0.6 * len(labels))
+        validate_split = int(0.8 * len(labels))
+        
+        idx_train = idx_rand[:train_split]
+        idx_valid = idx_rand[train_split:validate_split]
+        idx_test = idx_rand[validate_split:]
+        # Test the model
+        conf.model.eval()
+        with torch.no_grad():
+            test_output = conf.model(features[idx_test], edges_adj[idx_test])
+            test_loss = conf.loss_func(test_output, labels[idx_test])
+            test_accuracy = accuracy(test_output, labels[idx_test])
+            print(f"Test Loss: {test_loss}, Test Accuracy: {test_accuracy}")
+
+  
     # Start and watch the experiment
     with experiment.start():
         # Run the training
