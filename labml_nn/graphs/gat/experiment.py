@@ -299,41 +299,71 @@ def main():
         'optimizer.weight_decay': 5e-4,
     })
 
-
-
-    # Start and watch the experiment
+    # Start the experiment
     with experiment.start():
-        # Load the data
+        # Load the feature vectors to the device
         features = conf.dataset.features.to(conf.device)
+        # Load the labels to the device
         labels = conf.dataset.labels.to(conf.device)
-        edges_adj = conf.dataset.adj_mat.to(conf.device)
-        edges_adj = edges_adj.unsqueeze(-1)
-        
-        # Random indexes
+        # Load the adjacency matrix to the device and add an empty dimension for heads
+        edges_adj = conf.dataset.adj_mat.to(conf.device).unsqueeze(-1)
+
+        # Randomly shuffle indexes
         idx_rand = torch.randperm(len(labels))
         
-        # Split data into train, validate, and test
+        # Split indexes for training, validation, and test
         train_split = int(0.6 * len(labels))
         validate_split = int(0.8 * len(labels))
         
         idx_train = idx_rand[:train_split]
         idx_valid = idx_rand[train_split:validate_split]
         idx_test = idx_rand[validate_split:]
-        # Test the model
+
+        # Training loop
+        for epoch in monit.loop(conf.epochs):
+            # Set the model to training mode
+            conf.model.train()
+            # Zero the gradients
+            conf.optimizer.zero_grad()
+            # Forward pass
+            output = conf.model(features, edges_adj)
+            # Calculate loss on the training part
+            loss = conf.loss_func(output[idx_train], labels[idx_train])
+            # Backward pass
+            loss.backward()
+            # Update weights
+            conf.optimizer.step()
+            
+            # Log training loss and accuracy
+            tracker.add('loss.train', loss.item())
+            tracker.add('accuracy.train', accuracy(output[idx_train], labels[idx_train]))
+
+            # Validation part
+            conf.model.eval()
+            with torch.no_grad():
+                # Forward pass on validation set
+                valid_output = conf.model(features, edges_adj)
+                # Calculate validation loss
+                valid_loss = conf.loss_func(valid_output[idx_valid], labels[idx_valid])
+                # Log validation loss and accuracy
+                tracker.add('loss.valid', valid_loss.item())
+                tracker.add('accuracy.valid', accuracy(valid_output[idx_valid], labels[idx_valid]))
+
+            # Save logs for this epoch
+            tracker.save()
+
+        # Testing part after all epochs are done
         conf.model.eval()
         with torch.no_grad():
-            test_output = conf.model(features[idx_test], edges_adj[idx_test])
-            test_loss = conf.loss_func(test_output, labels[idx_test])
-            test_accuracy = accuracy(test_output, labels[idx_test])
+            # Forward pass on test set
+            test_output = conf.model(features, edges_adj)
+            # Calculate test loss
+            test_loss = conf.loss_func(test_output[idx_test], labels[idx_test])
+            # Calculate test accuracy
+            test_accuracy = accuracy(test_output[idx_test], labels[idx_test])
+            
+            # Print test results
             print(f"Test Loss: {test_loss}, Test Accuracy: {test_accuracy}")
 
-  
-    # Start and watch the experiment
-    with experiment.start():
-        # Run the training
-        conf.run()
-
-
-#
 if __name__ == '__main__':
     main()
